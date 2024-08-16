@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Cloud Generator</title>
+    <!-- Include D3.js library -->
+    <script src="d3.v7.js"></script>
+    <!-- Include D3-cloud library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-cloud/1.2.5/d3.layout.cloud.js"></script>
+	<style>
+		@font-face {
+			font-family: 'TheMixHair';
+			src: url('BaleMono-Regular.ttf') format('opentype');
+		}
+		
+		 body, html {
+			height: 100%;
+			margin: 0;
+			padding: 0;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			text-align: center; /* Helps center inline or inline-block elements */
+			background-color: #f5f5f5; /* Example background color */
+		}
+
+		#wordcloud {
+			/* Assuming specific size for demonstration */
+			width: 800px; /* Adjust if necessary */
+			height: 600px; /* Adjust if necessary */
+			display: block; /* Try block if flex doesn't give the desired result */
+			position: relative; /* For absolute positioning inside */
+			margin: auto; /* Helps with centering */
+		}
+
+
+        #wordcloud svg {
+            /* Directly styling the SVG for shadow */
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+            border: 1px solid #ddd; /* Example border */
+        }
+    </style>
+
+
+</head>
+<body>
+    <div id="wordcloud"></div>
+    <script>
+        fetch('words_alpha.txt')
+            .then(response => response.text())
+            .then(text => {
+                // Assuming words_alpha.txt contains one word per line
+                const englishWordsSet = new Set(text.split(/\r?\n/));
+
+                var stopwords = ["the", "and", "to", "of", "a", "in", "for", "is", "on", "that", "with",
+            "as", "it", "by", "are", "this", "be", "from", "at", "or", "which",
+            "an", "was", "has", "its", "also", "not", "were", "can", "we", "have",
+            "has", "had", "but", "if", "they", "will", "more", "their", "about",
+            "one", "all", "there", "so", "when", "who", "what", "would", "up",
+            "out", "do", "like", "just", "some", "her", "him", "other", "into",
+            "these", "than", "then", "first", "any", "my", "our", "now", "such",
+            "only", "new", "may", "should", "after", "most", "over", "even",
+            "where", "many", "before", "those", "through", "down", "may", "should",
+            "over", "them", "himself", "herself", "itself", "themselves", "yourself",
+            "yourselves", "himself", "herself"];
+
+                var layout = d3.layout.cloud()
+                    .size([800, 600])
+                    .padding(5)
+                    //.rotate(function(d) { return Math.random() > 0.9 ? 90 : 0;})
+					.rotate(function() { return ~~(Math.random() * 2) * 90; })
+                    .spiral("archimedean")
+                    // Font size scaling is now dynamic
+                    .fontSize(function(d) { return Math.sqrt(d.size) * 10; })
+                    .on("end", updateWordCloud);
+
+             /*   function processData(data) {
+                    var rawContents = data.map(function(d) { return d.cleaned_content; });
+                    var text = rawContents.join(" ");
+                    
+					// Remove special characters and normalize the text
+					var normalizedText = text.replace(/[^a-zA-Z\s]/g, "").toLowerCase();
+					//var normalizedText = text.replace(/[^a-zA-Z\s]/g, "");
+    
+					var words = normalizedText.match(/\b[a-z']+\b/g); // Match words
+
+                    var wordCounts = words.reduce(function(acc, word) {
+					// Only include words that are longer than two characters, not stopwords, and are English
+					if (word.length > 3 && !stopwords.includes(word) && englishWordsSet.has(word)) {
+						acc[word] = (acc[word] || 0) + 1;
+					}
+					return acc;
+					}, {});
+					
+					console.log(wordCounts);
+
+                    // Implementing a minimum frequency threshold
+                    //var minFrequency = 2; // Words must appear at least this many times
+                    //var wordCloudData = Object.entries(wordCounts)
+                    //    .filter(([word, count]) => count >= minFrequency)
+                    //    .map(([word, count]) => ({ text: word, size: count }));
+						
+					// Directly mapping word counts to the word cloud data structure without minimum frequency filter
+					var wordCloudData = Object.entries(wordCounts).map(([word, count]) => ({ text: word, size: count }));
+
+
+                    layout.words(wordCloudData).start();
+                } */
+				
+				function processData(data) {
+					var rawContents = data.map(function(d) { return d.cleaned_content; });
+					var text = rawContents.join(" ");
+					
+					// Normalize the text but keep the case to detect proper nouns
+					var normalizedText = text.replace(/[^a-zA-Z\s]/g, "");
+					
+					var words = normalizedText.match(/\b[a-zA-Z']+\b/g); // Match words including proper nouns
+
+					var wordCounts = words.reduce(function(acc, word) {
+						// Normalize to lowercase for counting, but store as is for display
+						var lowerWord = word.toLowerCase();
+						// Only include words that are longer than three characters and not stopwords
+						if (word.length > 3 && !stopwords.includes(lowerWord)) {
+							var displayWord = word.length > 3 ? word : lowerWord;
+							acc[displayWord] = (acc[displayWord] || 0) + 1;
+						}
+						return acc;
+					}, {});
+
+					// Convert the wordCounts object into an array of unique words with their respective counts
+					var wordCloudData = Object.keys(wordCounts).map(function(word) {
+						return {text: word, size: wordCounts[word]};
+					});
+
+					layout.words(wordCloudData).start();
+				}
+
+
+             function updateWordCloud(words) {
+            var fill = d3.scaleOrdinal(d3.schemeCategory10);
+
+            var wordcloud = d3.select("#wordcloud").append("svg")
+                .attr("width", layout.size()[0])
+                .attr("height", layout.size()[1])
+				.style("box-shadow", "0 4px 8px rgba(0, 0, 0, 0.2)")
+				 .style("border", "1px solid #ddd")
+                .append("g")
+                .attr("transform", "translate(" + layout.size()[0] / 2 + "," + layout.size()[1] / 2 + ")");
+
+            var texts = wordcloud.selectAll("text")
+                .data(words)
+                .enter().append("text")
+                .text(function(d) { return d.text; })
+                .style("font-size", "1px")
+                .style("font-family", "TheMixHair")
+                .style("fill", function(d, i) { return fill(i); })
+                .attr("text-anchor", "middle");
+
+            // Animation: Increase font size for transition effect
+            texts.transition()
+                .duration(700)
+                .style("font-size", function(d) { return d.size + "px"; })
+                .attr("transform", function(d) {
+                    return "translate(" + [d.x, d.y] + ")rotate(" + d.rotate + ")";
+                })
+                .style("fill-opacity", 1);
+
+            // Interactivity: Example of mouseover event
+            texts.on("mouseover", function(event, d) {
+                d3.select(this).style("fill", "red"); // Change color to red on mouseover
+            })
+            .on("mouseout", function(event, d) {
+                d3.select(this).style("fill", function(d, i) { return fill(i); }); // Revert color on mouseout
+            });
+        }
+
+
+                d3.csv("tweets_finalv4.csv").then(processData);
+            })
+            .catch(error => {
+                console.error('Error loading English word list:', error);
+            });
+			
+			d3.select("#wordcloud svg")
+          .style("box-shadow", "0 4px 8px rgba(0, 0, 0, 0.2)")
+          .style("border", "1px solid #ddd");
+    </script>
+</body>
+</html>

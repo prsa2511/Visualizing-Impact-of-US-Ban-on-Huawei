@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Time Series Sentiment Analysis</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+	
+	<style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f5f5f5; /* Example background color */
+        }
+
+        #time-series {
+            width: 960px; /* Adjust based on your SVG width */
+            height: 540px; /* Adjust based on your SVG height + margin */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Style directly applied to SVG via D3.js for shadow effect */
+    </style>
+
+</head>
+<body>
+<div id="time-series"></div>
+<script>
+d3.csv("tweets_finalv4.csv").then(function(data) {
+     // Parse and format the date
+    var parseDate = d3.timeParse("%m/%d/%Y");
+    data.forEach(function(d) {
+        d.dateParsed = parseDate(d.date_created);
+    });
+
+    // Aggregate data by date and sentiment
+    let sentimentCounts = d3.rollup(data, 
+                                    v => v.length, 
+                                    d => d.date_created, 
+                                    d => d.sentiment);
+
+    // Flatten the rollup structure into something we can use to plot
+    let flattenedData = [];
+    sentimentCounts.forEach((value, date) => {
+        value.forEach((count, sentiment) => {
+            flattenedData.push({date: parseDate(date), sentiment, count});
+        });
+    });
+
+    // Now we have flattenedData that we can plot
+    // Set the dimensions and margins of the graph
+    var margin = {top: 10, right: 30, bottom: 30, left: 60},
+        width = 960 - margin.left - margin.right,
+        height = 500 - margin.top - margin.bottom;
+
+    var svg = d3.select("#time-series")
+      .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+        .attr("transform",
+              "translate(" + margin.left + "," + margin.top + ")");
+
+    // Add X axis
+    var x = d3.scaleTime()
+      .domain(d3.extent(flattenedData, function(d) { return d.date; }))
+      .range([ 0, width ]);
+    svg.append("g")
+      .attr("transform", "translate(0," + height + ")")
+      .call(d3.axisBottom(x));
+	  
+	// Add X axis label:
+	svg.append("text")             
+    .attr("transform",
+          "translate(" + (width/2) + " ," + 
+                         (height + margin.top + 20) + ")") // Position below the x-axis
+    .style("text-anchor", "middle")
+    .text("Time");
+
+    // Add Y axis
+    var y = d3.scaleLinear()
+      .domain([0, d3.max(flattenedData, function(d) { return +d.count; })])
+      .range([ height, 0 ]);
+    svg.append("g")
+      .call(d3.axisLeft(y));
+	  
+	 // Add Y axis label:
+	svg.append("text")
+    .attr("transform", "rotate(-90)") // Rotate text for y-axis
+    .attr("y", 0 - margin.left) // Position to the left of the y-axis
+    .attr("x",0 - (height / 2))
+    .attr("dy", "1em") // Adjust position slightly
+    .style("text-anchor", "middle")
+    .text("No. of Tweets");
+
+    var color = d3.scaleOrdinal()
+      .domain(["positive", "negative", "neutral"])
+      .range(["#1f77b4", "#ff7f0e", "#2ca02c"]);
+
+    var line = d3.line()
+      .x(function(d) { return x(d.date); })
+      .y(function(d) { return y(d.count); });
+
+    var sumstat = d3.group(flattenedData, d => d.sentiment);
+
+    // Define the drawing order
+    var drawingOrder = ["negative", "neutral", "positive"];
+    
+    // Calculate total animation duration for each line
+    var animationDuration = 4500; // Duration for each line animation
+    var delayBetweenLines = 600; // Delay between each line drawing
+
+    drawingOrder.forEach(function(sentiment, index) {
+        var sentimentData = sumstat.get(sentiment);
+        var path = svg.append("path")
+            .datum(sentimentData)
+            .attr("class", "line " + sentiment) // Use sentiment for class name
+            .attr("fill", "none")
+            .attr("stroke", color(sentiment))
+            .attr("stroke-width", 1.5)
+            .attr("d", line)
+            .attr("stroke-dasharray", function() {
+                var totalLength = this.getTotalLength();
+                return totalLength + " " + totalLength;
+            })
+            .attr("stroke-dashoffset", function() {
+                return this.getTotalLength();
+            });
+
+        // Apply the animation with delay based on the drawing order
+        path.transition()
+            .duration(animationDuration)
+            .delay(index * (animationDuration + delayBetweenLines)) // Sequential delay
+            .attr("stroke-dashoffset", 0);
+    });
+
+    // Define the legend
+    var sentiments = ["positive", "negative", "neutral"]; // Sentiments as they appear in your data
+    var legendSpace = width/sentiments.length; // spacing for legend items
+	var legendYOffset = height + margin.top + 40;
+
+    sentiments.forEach(function(sentiment, index){
+        // Append rectangles to serve as colored markers in the legend
+        svg.append("rect")
+            .attr("x", margin.left + legendSpace/2 + index * legendSpace) // position rectangles
+            .attr("y", legendYOffset) // slightly below the chart
+            .attr("width", 10)
+            .attr("height", 10)
+            .style("fill", color(sentiment)); // use the same color scale as the lines
+
+        // Append text labels for each sentiment
+        svg.append("text")
+            .attr("x", margin.left + legendSpace/2 + index * legendSpace + 15) // position text next to rectangles
+            .attr("y", height + (margin.bottom/2) + 15) // align text with rectangles
+            .attr("class", "legend") // optional: for styling via CSS
+            .style("fill", color(sentiment)) // optional: if you want text color to match the line/rectangle
+            .text(sentiment.charAt(0).toUpperCase() + sentiment.slice(1)); // Capitalize first letter
+    });
+
+    // Add interactivity
+    sentiments.forEach(function(sentiment, index){
+        // Select both the rect and text for hover effect to apply on both
+        svg.selectAll(".legend" + sentiment.charAt(0).toUpperCase() + sentiment.slice(1))
+            .data([sentiment]) // Pass sentiment as data for access in event handlers
+            .enter()
+            .append("g") // Create a group to combine rect and text
+            .on("mouseover", function(event, d) {
+                // Reduce opacity of all lines
+                svg.selectAll(".line")
+                    .style("opacity", 0.1);
+                // Highlight only the line corresponding to the hovered sentiment
+                svg.selectAll(".line." + d)
+                    .style("opacity", 1);
+            })
+            .on("mouseout", function() {
+                // Reset opacity back to normal for all lines
+                svg.selectAll(".line")
+                    .style("opacity", 1);
+            })
+            // Append legend markers and text within the group for combined hover effect
+            .append("rect")
+            .attr("x", margin.left + legendSpace/2 + index * legendSpace) 
+            .attr("y", height + (margin.bottom/2) + 5) 
+            .attr("width", 10)
+            .attr("height", 10)
+            .style("fill", color(sentiment));
+        // Append text in a similar way within the 'g' element for each sentiment
+    });
+});
+
+d3.select("#time-series svg")
+  .style("box-shadow", "0 4px 8px rgba(0, 0, 0, 0.2)")
+  .style("border", "1px solid #ddd");
+</script>
+</body>
+</html>
